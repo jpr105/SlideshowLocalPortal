@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Slideshow</title>
+  <style>
+    /* ============================================================
+       SLIDESHOW — fichier autonome, aucune dépendance externe
+       Pour personnaliser : cherchez les sections marquées "CONFIG"
+    ============================================================ */
+
+    /* CONFIG : couleurs & thème */
+    :root {
+      --bg: #0a0a0f;
+      --accent: rgba(255, 255, 255, 0.75);
+      --caption-bg: rgba(0, 0, 0, 0.65);
+      --dot-inactive: rgba(255, 255, 255, 0.3);
+      --dot-active: #ffffff;
+      --nav-bg: rgba(255, 255, 255, 0.1);
+      --nav-hover: rgba(255, 255, 255, 0.22);
+      --progress-color: rgba(255, 255, 255, 0.8);
+
+      /* CONFIG : durée entre chaque slide (en ms) */
+      --slide-duration: 4000;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+      color: white;
+    }
+
+    /* ============================================================
+       STAGE PRINCIPAL
+    ============================================================ */
+    #stage {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: var(--bg);
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    /* ============================================================
+       SLIDES
+    ============================================================ */
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transform: scale(1.05);
+      transition: opacity 0.8s ease, transform 0.8s ease;
+      pointer-events: none;
+    }
+    .slide.active {
+      opacity: 1;
+      transform: scale(1);
+      pointer-events: auto;
+    }
+    .slide.exit {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    .slide img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;   /* CONFIG : "contain" garde les proportions, "cover" remplit tout */
+      display: block;
+    }
+
+    /* Placeholder quand pas d'image */
+    .placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      width: 100%;
+      height: 100%;
+    }
+    .placeholder-num {
+      font-size: 120px;
+      font-weight: 700;
+      opacity: 0.06;
+      line-height: 1;
+      color: white;
+    }
+    .placeholder-label {
+      font-size: 13px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.25);
+    }
+
+    /* ============================================================
+       BARRE DE PROGRESSION (haut)
+    ============================================================ */
+    #progress-bar {
+      position: absolute;
+      top: 0; left: 0;
+      height: 3px;
+      width: 0%;
+      background: var(--progress-color);
+      z-index: 10;
+      transition: width 0.1s linear;
+    }
+
+    /* ============================================================
+       LÉGENDE + DOTS (bas)
+    ============================================================ */
+    #caption-bar {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      padding: 60px 32px 28px;
+      background: linear-gradient(transparent, var(--caption-bg));
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      z-index: 10;
+      pointer-events: none;
+    }
+    #caption {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--accent);
+      max-width: 60%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #dots {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      pointer-events: auto;
+    }
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--dot-inactive);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .dot.active {
+      background: var(--dot-active);
+      width: 22px;
+      border-radius: 4px;
+    }
+
+    /* ============================================================
+       BOUTONS NAVIGATION (gauche / droite)
+    ============================================================ */
+    .nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: var(--nav-bg);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: white;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+      transition: background 0.2s;
+      user-select: none;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    .nav-btn:hover { background: var(--nav-hover); }
+    #btn-prev { left: 16px; }
+    #btn-next { right: 16px; }
+
+    /* ============================================================
+       OVERLAY PAUSE (optionnel)
+    ============================================================ */
+    #pause-icon {
+      position: absolute;
+      top: 16px; right: 16px;
+      font-size: 13px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.4);
+      z-index: 10;
+      display: none;
+    }
+    #pause-icon.visible { display: block; }
+
+    /* ============================================================
+       COMPTEUR slide X / N
+    ============================================================ */
+    #counter {
+      position: absolute;
+      top: 16px; left: 20px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.35);
+      z-index: 10;
+      letter-spacing: 0.05em;
+    }
+  </style>
+</head>
+<body>
+
+<div id="stage">
+
+  <div id="progress-bar"></div>
+  <div id="counter">1 / 4</div>
+  <div id="pause-icon">⏸ pause</div>
+
+  <!-- ============================================================
+       CONFIG SLIDES : ajoutez/modifiez les slides ici
+       Pour utiliser une image : <img src="nom-du-fichier.png" alt="Description">
+       Les fichiers images doivent être dans le même dossier que ce .html
+  ============================================================ -->
+
+  <div class="slide active" data-label="Diapo 1">
+    <!-- Remplacez le contenu par : <img src="page-accueil.png" alt="Diapo 1"> -->
+    <div class="placeholder">
+      <div class="placeholder-num">01</div>
+      <div class="placeholder-label">Portail Local</div>
+    </div>
+  </div>
+
+  <div class="slide" data-label="Diapo 2">
+    <!-- <img src="section-web.png" alt="Diapo 2"> -->
+    <div class="placeholder">
+      <div class="placeholder-num">02</div>
+      <div class="placeholder-label">Section Web</div>
+    </div>
+  </div>
+
+  <div class="slide" data-label="Slide 3">
+    <!-- <img src="capture3.png" alt="Capture 3"> -->
+    <div class="placeholder">
+      <div class="placeholder-num">03</div>
+      <div class="placeholder-label">Remplacer par votre capture</div>
+    </div>
+  </div>
+
+  <div class="slide" data-label="Slide 4">
+    <!-- <img src="capture4.png" alt="Capture 4"> -->
+    <div class="placeholder">
+      <div class="placeholder-num">04</div>
+      <div class="placeholder-label">Remplacer par votre capture</div>
+    </div>
+  </div>
+
+  <!-- FIN CONFIG SLIDES -->
+
+  <div id="caption-bar">
+    <div id="caption">Slide 1</div>
+    <div id="dots"></div>
+  </div>
+
+  <div class="nav-btn" id="btn-prev">&#8249;</div>
+  <div class="nav-btn" id="btn-next">&#8250;</div>
+
+</div>
+
+<script>
+  // ============================================================
+  // CONFIG JS
+  // ============================================================
+  const DURATION_MS = 4000;   // Durée par slide en millisecondes
+  const AUTO_PLAY   = true;   // true = lecture automatique au démarrage
+  // ============================================================
+
+  const slides   = Array.from(document.querySelectorAll('.slide'));
+  const dotsEl   = document.getElementById('dots');
+  const captionEl= document.getElementById('caption');
+  const progress = document.getElementById('progress-bar');
+  const counter  = document.getElementById('counter');
+  const pauseIcon= document.getElementById('pause-icon');
+  const stage    = document.getElementById('stage');
+
+  let current  = 0;
+  let playing  = AUTO_PLAY;
+  let elapsed  = 0;
+  let lastTime = null;
+
+  // Génère les dots
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.addEventListener('click', e => { e.stopPropagation(); goTo(i); });
+    dotsEl.appendChild(d);
+  });
+
+  function goTo(n) {
+    slides[current].classList.remove('active');
+    slides[current].classList.add('exit');
+    const prev = current;
+    setTimeout(() => slides[prev].classList.remove('exit'), 800);
+
+    current = ((n % slides.length) + slides.length) % slides.length;
+    slides[current].classList.add('active');
+
+    // Mise à jour UI
+    document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === current));
+    captionEl.textContent = slides[current].dataset.label || ('Slide ' + (current + 1));
+    counter.textContent   = (current + 1) + ' / ' + slides.length;
+
+    elapsed = 0;
+    lastTime = null;
+    progress.style.width = '0%';
+  }
+
+  // Boucle RAF
+  function tick(ts) {
+    if (playing) {
+      if (!lastTime) lastTime = ts;
+      elapsed += ts - lastTime;
+      lastTime = ts;
+      const pct = Math.min(100, (elapsed / DURATION_MS) * 100);
+      progress.style.width = Math.round(pct) + '%';
+      if (elapsed >= DURATION_MS) goTo(current + 1);
+    } else {
+      lastTime = null;
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // Clic sur le stage = slide suivant
+  stage.addEventListener('click', () => goTo(current + 1));
+
+  // Boutons nav
+  document.getElementById('btn-next').addEventListener('click', e => { e.stopPropagation(); goTo(current + 1); });
+  document.getElementById('btn-prev').addEventListener('click', e => { e.stopPropagation(); goTo(current - 1); });
+
+  // Clavier : ← → espace
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goTo(current + 1); }
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); goTo(current - 1); }
+    if (e.key === 'p' || e.key === 'P') togglePlay();
+  });
+
+  function togglePlay() {
+    playing = !playing;
+    pauseIcon.classList.toggle('visible', !playing);
+  }
+</script>
+
+</body>
+</html>
